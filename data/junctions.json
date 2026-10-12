@@ -1,0 +1,12 @@
+{
+  "A009": {
+    "name": "Jalan Ismail Sultan / Persiaran Tun Sri Lanang",
+    "layout_image": "layouts/A009.png",
+    "stages": {
+      "Stage 1": "Jalan Ismail Sultan, D1 to D3",
+      "Stage 2": "Persiaran Tun Sri Lanang, D4 to D7",
+      "Stage 3": "D8 to D12 (no data)",
+      "No stage": "D13, not in a stage"
+    }
+  }
+}

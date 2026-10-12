@@ -1,0 +1,597 @@
+<title>Junction Traffic Volume</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: control-room board. Filter strip, KPI row, then a 12-column grid of panels:
+   junction layout beside detectors, hourly profile beside class mix, two heatmaps, daily totals beside top hours. */
+:root {
+  --bg: #eef1f4;
+  --surface: #fcfcfd;
+  --ink: #0f1720;
+  --ink-2: #4b5562;
+  --muted: #7d8692;
+  --grid: #e3e7ec;
+  --axis: #c3c9d1;
+  --border: rgba(15, 23, 32, 0.10);
+  --accent: #1c5cab;
+  --accent-wash: rgba(28, 92, 171, 0.10);
+  --signal-red: #d03b3b;
+  --signal-amber: #fab219;
+  --signal-green: #0ca30c;
+
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s-none: #9aa1ab;
+  --seq-0: #e6effa; --seq-1: #b7d3f6; --seq-2: #6da7ec; --seq-3: #2a78d6; --seq-4: #1c5cab; --seq-5: #0d366b;
+
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0f13; --surface: #161a20; --ink: #eef0f2; --ink-2: #c0c6cd; --muted: #8a929c;
+    --grid: #262b33; --axis: #3a404a; --border: rgba(255, 255, 255, 0.09);
+    --accent: #6da7ec; --accent-wash: rgba(109, 167, 236, 0.14);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-none: #6b727c;
+    --seq-0: #1b2533; --seq-1: #184f95; --seq-2: #256abf; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0f13; --surface: #161a20; --ink: #eef0f2; --ink-2: #c0c6cd; --muted: #8a929c;
+  --grid: #262b33; --axis: #3a404a; --border: rgba(255, 255, 255, 0.09);
+  --accent: #6da7ec; --accent-wash: rgba(109, 167, 236, 0.14);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-none: #6b727c;
+  --seq-0: #1b2533; --seq-1: #184f95; --seq-2: #256abf; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #b7d3f6;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 14px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1440px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 40px; display: grid; gap: 16px; }
+
+/* Header */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.signal { display: flex; gap: 5px; padding: 7px 9px; border-radius: 999px; background: #1a1f26; flex: none; }
+.signal i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.signal i:nth-child(1) { background: var(--signal-red); }
+.signal i:nth-child(2) { background: var(--signal-amber); }
+.signal i:nth-child(3) { background: var(--signal-green); }
+h1 { margin: 0; font: 600 clamp(20px, 2.4vw, 26px)/1.1 var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; text-wrap: balance; }
+.sub { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+.stamp { color: var(--muted); font-size: 12px; text-align: right; }
+.stamp b { display: block; color: var(--ink); font: 600 15px/1.3 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Filters */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
+}
+.field { display: grid; gap: 4px; }
+.field label, .field .lbl { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+select, button { font: inherit; color: var(--ink); }
+select {
+  appearance: none; background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237d8692' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 28px 7px 10px; min-width: 0; cursor: pointer;
+}
+.pair { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.seg { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); color: var(--accent);
+  background: var(--accent-wash); border-radius: 999px; padding: 5px 8px 5px 12px; cursor: pointer; font-weight: 500;
+}
+.chip span { font-size: 15px; line-height: 1; }
+.ghost { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 7px 12px; cursor: pointer; color: var(--ink-2); }
+.ghost:hover, .seg button:hover { color: var(--ink); }
+.spacer { flex: 1 1 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: 1.3fr repeat(4, 1fr); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.kpi .lbl { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.kpi .val { font: 600 30px/1.1 var(--font-ui); letter-spacing: -0.01em; }
+.kpi.hero .val { font-size: 44px; }
+.kpi .note { font-size: 12px; color: var(--muted); }
+
+/* Panels */
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px 10px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.panel h2 { margin: 0; font: 600 15px/1.3 var(--font-ui); }
+.panel .hint { margin: 0; font-size: 12px; color: var(--muted); }
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.c4 { grid-column: span 4; } .c5 { grid-column: span 5; } .c7 { grid-column: span 7; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
+.chart { width: 100%; min-height: 0; }
+.h260 { height: 260px; } .h300 { height: 300px; } .h320 { height: 320px; }
+
+/* Layout panel */
+.layout-img { border-radius: 8px; border: 1px solid var(--border); background: #fff; overflow: hidden; }
+.layout-img img { display: block; width: 100%; height: auto; }
+.layout-empty { border: 1px dashed var(--axis); border-radius: 8px; padding: 18px 14px; color: var(--muted); font-size: 12px; text-align: center; }
+.layout-empty code { color: var(--ink-2); }
+.stages { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; }
+.stages li { display: grid; gap: 5px; }
+.stages .st { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.stages .st i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.stages .st small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.dets { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 18px; }
+.dets button {
+  border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer;
+  font-variant-numeric: tabular-nums; color: var(--ink-2);
+}
+.dets button:hover { border-color: var(--accent); color: var(--ink); }
+.dets button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.dets button.nodata { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--axis); }
+
+/* Class mix */
+.mix { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 12px; }
+.mix li { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: center; }
+.mix .name { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.mix .name i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.mix .track { height: 10px; background: var(--grid); border-radius: 0 4px 4px 0; overflow: hidden; }
+.mix .bar { height: 100%; border-radius: 0 4px 4px 0; }
+.mix .num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+.mix .num small { color: var(--muted); margin-left: 6px; }
+.mix-foot { margin-top: auto; padding-top: 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--grid); }
+
+/* Table */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+td { padding: 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent-wash); color: var(--accent); font-weight: 600; font-size: 12px; }
+
+.foot { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
+.empty-msg { color: var(--muted); text-align: center; padding: 40px 0; }
+
+@media (max-width: 1100px) {
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi.hero { grid-column: span 3; }
+  .c4, .c5, .c7, .c8 { grid-column: span 12; }
+}
+@media (max-width: 620px) {
+  .wrap { padding-inline: 16px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi.hero { grid-column: span 2; }
+  .kpi .val { font-size: 24px; } .kpi.hero .val { font-size: 36px; }
+  .stamp { text-align: left; }
+  .spacer { display: none; }
+  .mix li { grid-template-columns: 88px 1fr auto; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="signal" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div>
+        <h1>Junction Traffic Volume</h1>
+        <div class="sub" id="sub"></div>
+      </div>
+    </div>
+    <div class="stamp"><b id="range"></b><span id="rangeNote"></span></div>
+  </header>
+
+  <section class="filters" aria-label="Filters">
+    <div class="field"><label for="fJunction">Junction</label><select id="fJunction"></select></div>
+    <div class="field"><span class="lbl">Dates</span>
+      <div class="pair"><select id="fFrom" aria-label="From date"></select>to<select id="fTo" aria-label="To date"></select></div>
+    </div>
+    <div class="field"><span class="lbl">Day type</span>
+      <div class="seg" id="fDay" role="group" aria-label="Day type">
+        <button type="button" data-v="All" aria-pressed="true">All</button>
+        <button type="button" data-v="Weekday" aria-pressed="false">Weekday</button>
+        <button type="button" data-v="Weekend" aria-pressed="false">Weekend</button>
+      </div>
+    </div>
+    <div class="field"><span class="lbl">Hours</span>
+      <div class="pair"><select id="fH0" aria-label="From hour"></select>to<select id="fH1" aria-label="To hour"></select></div>
+    </div>
+    <div class="field" id="detField" hidden><span class="lbl">Detector</span><button type="button" class="chip" id="detChip"></button></div>
+    <div class="spacer"></div>
+    <button type="button" class="ghost" id="reset">Reset filters</button>
+  </section>
+
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi hero"><span class="lbl">Total vehicles</span><span class="val" id="kTotal">–</span><span class="note" id="kTotalNote"></span></div>
+    <div class="kpi"><span class="lbl">Average per day</span><span class="val" id="kAvg">–</span><span class="note" id="kAvgNote"></span></div>
+    <div class="kpi"><span class="lbl">Busiest hour</span><span class="val" id="kPeak">–</span><span class="note" id="kPeakNote"></span></div>
+    <div class="kpi"><span class="lbl">Busiest detector</span><span class="val" id="kDet">–</span><span class="note" id="kDetNote"></span></div>
+    <div class="kpi"><span class="lbl">Heavy vehicles (MID + BIG)</span><span class="val" id="kHeavy">–</span><span class="note" id="kHeavyNote"></span></div>
+  </section>
+
+  <section class="grid">
+    <article class="panel c4">
+      <div class="ph"><h2>Junction layout</h2><p class="hint">Pick a detector to filter</p></div>
+      <div id="layout"></div>
+      <ul class="stages" id="stages"></ul>
+    </article>
+    <article class="panel c8">
+      <div class="ph"><h2>Average daily volume by detector</h2><p class="hint">Coloured by stage. Click a bar to filter</p></div>
+      <div class="chart h320" id="cDet"></div>
+    </article>
+
+    <article class="panel c8">
+      <div class="ph"><h2>Average hourly profile</h2><p class="hint">Vehicles per hour, averaged over the selected days</p></div>
+      <div class="chart h300" id="cHour"></div>
+    </article>
+    <article class="panel c4">
+      <div class="ph"><h2>Vehicle class mix</h2><p class="hint">Average per day</p></div>
+      <ul class="mix" id="mix"></ul>
+      <div class="mix-foot" id="mixFoot"></div>
+    </article>
+
+    <article class="panel c12">
+      <div class="ph"><h2>Stage by hour</h2><p class="hint">Average vehicles per day in each hour</p></div>
+      <div class="chart" id="cStage"></div>
+    </article>
+
+    <article class="panel c12">
+      <div class="ph"><h2>Day by hour</h2><p class="hint">Vehicles in each hour of each day</p></div>
+      <div class="chart" id="cDay"></div>
+    </article>
+
+    <article class="panel c7">
+      <div class="ph"><h2>Daily totals</h2></div>
+      <div class="chart h260" id="cDaily"></div>
+    </article>
+    <article class="panel c5">
+      <div class="ph"><h2>Top 5 busiest hours</h2></div>
+      <div class="tbl-wrap"><table id="top5"><thead><tr><th>#</th><th>Date</th><th>Hour</th><th class="r">Vehicles</th></tr></thead><tbody></tbody></table></div>
+    </article>
+  </section>
+
+  <footer class="foot"><span id="footData"></span><span id="footBuilt"></span></footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const D = DATA;
+  const NJ = D.junctions.length;
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00");
+
+  const dateParts = D.dates.map((s) => { const [y, m, d] = s.split("-").map(Number); return { y, m, d, wd: new Date(Date.UTC(y, m - 1, d)).getUTCDay() }; });
+  const fmtDate = (i, withYear) => { const p = dateParts[i]; return `${WD[p.wd]}, ${p.d} ${MONTHS[p.m - 1]}${withYear ? " " + p.y : ""}`; };
+  const fmtShort = (i) => { const p = dateParts[i]; return `${p.d} ${MONTHS[p.m - 1]}`; };
+  const nf = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+  const n = (v) => nf.format(Math.round(v));
+  const compact = (v) => v >= 1e6 ? (v / 1e6).toFixed(2).replace(/\.?0+$/, "") + "M" : v >= 1e4 ? (v / 1e3).toFixed(1).replace(/\.0$/, "") + "k" : n(v);
+  const axisK = (v) => v >= 1000 ? (v / 1000) + "k" : String(v);
+
+  // Rows grouped by junction, vehicles back to real numbers
+  const byJ = Array.from({ length: NJ }, () => []);
+  for (const r of D.rows) byJ[r[0]].push([r[1], r[2], r[3], r[4], r[5], r[6] / 100]);
+  const R_DATE = 0, R_HOUR = 1, R_DET = 2, R_STAGE = 3, R_CLASS = 4, R_V = 5;
+
+  // Dates and detector to stage mapping available per junction
+  const jDates = byJ.map((rows) => [...new Set(rows.map((r) => r[R_DATE]))].sort((a, b) => a - b));
+  const jDetStage = byJ.map((rows) => { const m = new Map(); for (const r of rows) if (!m.has(r[R_DET])) m.set(r[R_DET], r[R_STAGE]); return m; });
+
+  // Stage and class colours follow the entity, never rank
+  const STAGE_TOKEN = (name) => ({ "Stage 1": "--s1", "Stage 2": "--s2", "Stage 3": "--s3", "Stage 4": "--s4", "Stage 5": "--s5" })[name] || "--s-none";
+  const CLASS_TOKEN = (name) => ({ SML: "--s1", Motorcycle: "--s2", MID: "--s3", BIG: "--s4" })[name] || "--s-none";
+  let T = {};
+  const readTokens = () => {
+    const cs = getComputedStyle(document.documentElement);
+    const g = (k) => cs.getPropertyValue(k).trim();
+    T = { surface: g("--surface"), ink: g("--ink"), ink2: g("--ink-2"), muted: g("--muted"), grid: g("--grid"), axis: g("--axis"), accent: g("--accent"),
+      seq: [0, 1, 2, 3, 4, 5].map((i) => g("--seq-" + i)), font: g("--font-ui") || "system-ui", get: g };
+  };
+  const stageColor = (si) => T.get(STAGE_TOKEN(D.stages[si]));
+  const classColor = (ci) => T.get(CLASS_TOKEN(D.classes[ci]));
+
+  // State
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+  const S = { j: 0, d0: 0, d1: 0, day: "All", h0: 0, h1: 23, det: null };
+  const resetForJunction = () => { const ds = jDates[S.j]; S.d0 = ds[0]; S.d1 = ds[ds.length - 1]; S.det = null; };
+  const saved = Number(store.get("tv-junction"));
+  if (Number.isInteger(saved) && saved >= 0 && saved < NJ) S.j = saved;
+  resetForJunction();
+
+  // Filter controls
+  const fJ = $("fJunction"), fFrom = $("fFrom"), fTo = $("fTo"), fH0 = $("fH0"), fH1 = $("fH1");
+  fJ.innerHTML = D.junctions.map((j, i) => `<option value="${i}">${j.code}${j.name ? " · " + j.name : ""}</option>`).join("");
+  fH0.innerHTML = fH1.innerHTML = HOURS.map((h, i) => `<option value="${i}">${h}</option>`).join("");
+  const fillDates = () => {
+    const opts = jDates[S.j].map((i) => `<option value="${i}">${fmtDate(i)}</option>`).join("");
+    fFrom.innerHTML = fTo.innerHTML = opts;
+  };
+  const syncControls = () => {
+    fJ.value = S.j; fFrom.value = S.d0; fTo.value = S.d1; fH0.value = S.h0; fH1.value = S.h1;
+    for (const b of $("fDay").children) b.setAttribute("aria-pressed", String(b.dataset.v === S.day));
+    $("detField").hidden = S.det === null;
+    if (S.det !== null) $("detChip").innerHTML = `${D.detectors[S.det]} <span aria-hidden="true">×</span>`;
+    $("detChip").setAttribute("aria-label", S.det === null ? "" : `Clear detector filter ${D.detectors[S.det]}`);
+  };
+  fJ.onchange = () => { S.j = Number(fJ.value); store.set("tv-junction", String(S.j)); resetForJunction(); fillDates(); renderLayout(); update(); };
+  fFrom.onchange = () => { S.d0 = Number(fFrom.value); if (S.d1 < S.d0) S.d1 = S.d0; update(); };
+  fTo.onchange = () => { S.d1 = Number(fTo.value); if (S.d0 > S.d1) S.d0 = S.d1; update(); };
+  fH0.onchange = () => { S.h0 = Number(fH0.value); if (S.h1 < S.h0) S.h1 = S.h0; update(); };
+  fH1.onchange = () => { S.h1 = Number(fH1.value); if (S.h0 > S.h1) S.h0 = S.h1; update(); };
+  $("fDay").onclick = (e) => { const b = e.target.closest("button"); if (b) { S.day = b.dataset.v; update(); } };
+  $("detChip").onclick = () => setDet(null);
+  $("reset").onclick = () => { S.day = "All"; S.h0 = 0; S.h1 = 23; resetForJunction(); update(); };
+  const setDet = (d) => { S.det = S.det === d ? null : d; update(); };
+
+  // Charts
+  const charts = {};
+  const chart = (id) => charts[id] || (charts[id] = echarts.init($(id), null, { renderer: "svg" }));
+  window.addEventListener("resize", () => { Object.values(charts).forEach((c) => c.resize()); renderHeatmaps(lastCalc); });
+  const base = () => ({
+    animationDuration: 300, textStyle: { fontFamily: T.font, color: T.ink2 },
+    tooltip: { backgroundColor: T.surface, borderColor: T.axis, borderWidth: 1, textStyle: { color: T.ink, fontSize: 12, fontFamily: T.font }, extraCssText: "box-shadow:0 4px 14px rgba(0,0,0,.15);border-radius:8px;" },
+  });
+  const valueAxis = () => ({ type: "value", axisLabel: { color: T.muted, formatter: axisK }, splitLine: { lineStyle: { color: T.grid } }, axisLine: { show: false } });
+  const catAxis = (data, extra = {}) => ({ type: "category", data, axisLabel: { color: T.muted }, axisLine: { lineStyle: { color: T.axis } }, axisTick: { show: false }, ...extra });
+  const legend = (data) => ({ data, top: 0, left: 0, icon: "roundRect", itemWidth: 12, itemHeight: 8, textStyle: { color: T.ink2, fontSize: 12 } });
+
+  // Aggregation
+  let lastCalc = null;
+  function calc() {
+    const rows = byJ[S.j];
+    const dayOk = (di) => S.day === "All" || D.dayTypes[di] === S.day;
+    const dates = jDates[S.j].filter((di) => di >= S.d0 && di <= S.d1 && dayOk(di));
+    const dateSet = new Set(dates);
+    const nDays = dates.length || 1;
+    const nDet = D.detectors.length, nSt = D.stages.length, nCl = D.classes.length;
+
+    const det = new Float64Array(nDet), cls = new Float64Array(nCl);
+    const hourByType = { Weekday: new Float64Array(24), Weekend: new Float64Array(24) };
+    const stageHour = Array.from({ length: nSt }, () => new Float64Array(24));
+    const dayHour = new Map(dates.map((d) => [d, new Float64Array(24)]));
+    const daily = new Map(dates.map((d) => [d, 0]));
+    let total = 0;
+    for (const r of rows) {
+      const di = r[R_DATE], h = r[R_HOUR];
+      if (!dateSet.has(di) || h < S.h0 || h > S.h1) continue;
+      const v = r[R_V];
+      det[r[R_DET]] += v; // detector chart ignores the detector filter so every bar stays visible
+      if (S.det !== null && r[R_DET] !== S.det) continue;
+      total += v;
+      cls[r[R_CLASS]] += v;
+      const t = D.dayTypes[di] === "Weekend" ? "Weekend" : "Weekday";
+      hourByType[t][h] += v;
+      stageHour[r[R_STAGE]][h] += v;
+      dayHour.get(di)[h] += v;
+      daily.set(di, daily.get(di) + v);
+    }
+    const daysByType = { Weekday: dates.filter((d) => D.dayTypes[d] !== "Weekend").length, Weekend: dates.filter((d) => D.dayTypes[d] === "Weekend").length };
+    const hourAll = new Float64Array(24);
+    for (let h = 0; h < 24; h++) hourAll[h] = hourByType.Weekday[h] + hourByType.Weekend[h];
+    const top = [];
+    for (const [di, arr] of dayHour) for (let h = S.h0; h <= S.h1; h++) top.push({ di, h, v: arr[h] });
+    top.sort((a, b) => b.v - a.v);
+    return { dates, nDays, total, det, cls, hourByType, daysByType, hourAll, stageHour, dayHour, daily, top: top.slice(0, 5) };
+  }
+
+  function update() {
+    syncControls();
+    const c = (lastCalc = calc());
+    const j = D.junctions[S.j];
+    const ds = c.dates;
+    $("sub").textContent = `${j.code}${j.name ? " · " + j.name : ""}`;
+    $("range").textContent = ds.length ? (ds.length === 1 ? fmtDate(ds[0], true) : `${fmtShort(ds[0])} – ${fmtShort(ds[ds.length - 1])} ${dateParts[ds[ds.length - 1]].y}`) : "No days selected";
+    const scope = [S.day !== "All" ? S.day.toLowerCase() + "s only" : "", S.h0 > 0 || S.h1 < 23 ? `${HOURS[S.h0]} to ${String(S.h1).padStart(2, "0")}:59` : "", S.det !== null ? "detector " + D.detectors[S.det] : ""].filter(Boolean).join(", ");
+    $("rangeNote").textContent = `${ds.length} day${ds.length === 1 ? "" : "s"}${scope ? ", " + scope : ""}`;
+
+    // KPIs
+    $("kTotal").textContent = c.total ? compact(c.total) : "0";
+    $("kTotalNote").textContent = `${n(c.total)} vehicles counted`;
+    $("kAvg").textContent = n(c.total / c.nDays);
+    $("kAvgNote").textContent = `over ${c.dates.length} day${c.dates.length === 1 ? "" : "s"}`;
+    let ph = S.h0; for (let h = S.h0; h <= S.h1; h++) if (c.hourAll[h] > c.hourAll[ph]) ph = h;
+    $("kPeak").textContent = c.total ? HOURS[ph] : "–";
+    $("kPeakNote").textContent = c.total ? `${n(c.hourAll[ph] / c.nDays)} vehicles per day on average` : "";
+    let bd = 0; for (let i = 0; i < c.det.length; i++) if (c.det[i] > c.det[bd]) bd = i;
+    const detTotal = c.det.reduce((a, b) => a + b, 0);
+    $("kDet").textContent = detTotal ? D.detectors[bd] : "–";
+    $("kDetNote").textContent = detTotal ? `${n(c.det[bd] / c.nDays)} per day, ${Math.round((c.det[bd] / detTotal) * 100)}% of traffic` : "";
+    const heavy = D.classes.reduce((a, name, i) => a + (name === "MID" || name === "BIG" ? c.cls[i] : 0), 0);
+    $("kHeavy").textContent = c.total ? (heavy / c.total * 100).toFixed(1) + "%" : "–";
+    $("kHeavyNote").textContent = `${n(heavy / c.nDays)} per day`;
+
+    renderDetectors(c);
+    renderHourly(c);
+    renderMix(c);
+    renderHeatmaps(c);
+    renderDaily(c);
+    renderTop(c);
+    renderStageButtons();
+  }
+
+  function renderLayout() {
+    const j = D.junctions[S.j];
+    $("layout").innerHTML = j.layout
+      ? `<div class="layout-img"><img src="${j.layout}" alt="Layout of junction ${j.code} showing detector positions"></div>`
+      : `<div class="layout-empty">No layout image yet. Save it as <code>data/layouts/${j.code}.png</code> and add it to <code>data/junctions.json</code>, then rebuild.</div>`;
+  }
+
+  function renderStageButtons() {
+    const j = D.junctions[S.j];
+    const map = jDetStage[S.j];
+    const c = lastCalc;
+    const ul = $("stages");
+    ul.innerHTML = D.stages.map((st, si) => {
+      const dets = [...map.entries()].filter(([, s]) => s === si).map(([d]) => d).sort((a, b) => a - b);
+      if (!dets.length) return "";
+      const note = j.stageNotes[st] || "";
+      return `<li><div class="st"><i style="background:${stageColor(si)}"></i>${st}${note ? ` <small>${note}</small>` : ""}</div>
+        <div class="dets">${dets.map((d) => `<button type="button" data-d="${d}" aria-pressed="${S.det === d}" class="${c.det[d] ? "" : "nodata"}" title="${c.det[d] ? n(c.det[d] / c.nDays) + " per day" : "No vehicles recorded"}">${D.detectors[d]}</button>`).join("")}</div></li>`;
+    }).join("");
+  }
+  $("stages").onclick = (e) => { const b = e.target.closest("button[data-d]"); if (b) setDet(Number(b.dataset.d)); };
+
+  function renderDetectors(c) {
+    const map = jDetStage[S.j];
+    const idx = D.detectors.map((_, i) => i).filter((i) => map.has(i));
+    const usedStages = [...new Set(idx.map((i) => map.get(i)))].sort((a, b) => a - b);
+    const series = usedStages.map((si) => ({
+      name: D.stages[si], type: "bar", stack: "d", barMaxWidth: 24,
+      itemStyle: { color: stageColor(si), borderRadius: [4, 4, 0, 0] },
+      emphasis: { focus: "none" },
+      data: idx.map((i) => {
+        if (map.get(i) !== si) return null;
+        const v = c.det[i] / c.nDays;
+        return { value: v, itemStyle: { opacity: S.det === null || S.det === i ? 1 : 0.25 } };
+      }),
+      label: { show: $("cDet").clientWidth >= 600, position: "top", color: T.muted, fontSize: 11, formatter: (p) => (p.value >= 1 ? compact(p.value) : "no data") },
+    }));
+    // keep "no data" labels visible for zero bars
+    series.forEach((s) => s.data = s.data.map((d) => (d && d.value === 0 ? { ...d, value: 0.0001 } : d)));
+    const o = base();
+    Object.assign(o, {
+      grid: { left: 44, right: 8, top: 40, bottom: 28 },
+      legend: legend(usedStages.map((si) => D.stages[si])),
+      xAxis: catAxis(idx.map((i) => D.detectors[i])),
+      yAxis: valueAxis(),
+      tooltip: { ...o.tooltip, trigger: "item", formatter: (p) => `<b>${p.name}</b> · ${p.seriesName}<br>${p.value > 1 ? n(p.value) + " vehicles per day" : "No vehicles recorded"}` },
+      series,
+    });
+    const ch = chart("cDet");
+    ch.setOption(o, true);
+    ch.off("click");
+    ch.on("click", (p) => setDet(idx[p.dataIndex]));
+  }
+
+  function renderHourly(c) {
+    const hrs = HOURS.slice(S.h0, S.h1 + 1);
+    const types = S.day === "All" ? ["Weekday", "Weekend"] : [S.day];
+    const colors = { Weekday: T.get("--s1"), Weekend: T.get("--s2") };
+    const series = types.filter((t) => c.daysByType[t] > 0).map((t) => ({
+      name: t, type: "line", smooth: 0.25, symbol: "circle", symbolSize: 7, showSymbol: false,
+      lineStyle: { width: 2, color: colors[t] }, itemStyle: { color: colors[t], borderColor: T.surface, borderWidth: 2 },
+      areaStyle: types.length === 1 ? { color: colors[t], opacity: 0.1 } : undefined,
+      data: Array.from(c.hourByType[t].slice(S.h0, S.h1 + 1), (v) => Math.round(v / c.daysByType[t])),
+      endLabel: { show: true, color: T.ink2, fontSize: 11, formatter: (p) => p.seriesName },
+    }));
+    const o = base();
+    Object.assign(o, {
+      grid: { left: 44, right: 68, top: 36, bottom: 28 },
+      legend: legend(series.map((s) => s.name)),
+      xAxis: catAxis(hrs, { boundaryGap: false, axisLabel: { color: T.muted, interval: Math.max(0, Math.ceil(hrs.length / ($("cHour").clientWidth / 52)) - 1) } }),
+      yAxis: valueAxis(),
+      tooltip: { ...o.tooltip, trigger: "axis", axisPointer: { type: "line", lineStyle: { color: T.axis } },
+        valueFormatter: (v) => n(v) + " per hour" },
+      series,
+    });
+    chart("cHour").setOption(o, true);
+  }
+
+  function renderMix(c) {
+    const max = Math.max(...c.cls, 1);
+    const order = D.classes.map((_, i) => i).sort((a, b) => c.cls[b] - c.cls[a]).filter((i) => c.cls[i] > 0);
+    $("mix").innerHTML = order.length ? order.map((i) => `<li>
+      <span class="name"><i style="background:${classColor(i)}"></i>${D.classes[i]}</span>
+      <span class="track"><span class="bar" style="display:block;width:${(c.cls[i] / max) * 100}%;background:${classColor(i)}"></span></span>
+      <span class="num">${n(c.cls[i] / c.nDays)}<small>${(c.cls[i] / c.total * 100).toFixed(1)}%</small></span></li>`).join("")
+      : `<li class="empty-msg" style="display:block">No vehicles in this selection</li>`;
+    $("mixFoot").textContent = D.classes.includes("Unclassified") ? "Unclassified covers hours with no class split. Motorcycle is estimated as 23% of SML + MC." : "";
+  }
+
+  function heat(id, rowsLabels, matrix, valueLabel) {
+    const el = $(id);
+    const hrs = HOURS.slice(S.h0, S.h1 + 1);
+    const rowH = 30;
+    el.style.height = (rowsLabels.length * rowH + 64) + "px";
+    const ch = chart(id);
+    ch.resize();
+    const width = el.clientWidth;
+    const left = id === "cDay" ? 92 : 72;
+    const cellW = (width - left - 10) / hrs.length;
+    const data = [];
+    let max = 0;
+    matrix.forEach((row, y) => hrs.forEach((_, x) => { const v = row[x + S.h0]; max = Math.max(max, v); data.push([x, y, Math.round(v)]); }));
+    const o = base();
+    Object.assign(o, {
+      grid: { left, right: 10, top: 6, bottom: 54 },
+      xAxis: catAxis(hrs, { position: "bottom", axisLine: { show: false }, axisLabel: { color: T.muted, interval: cellW < 30 ? (cellW < 16 ? 3 : 1) : 0 }, splitArea: { show: false } }),
+      yAxis: catAxis(rowsLabels, { inverse: true, axisLine: { show: false }, axisLabel: { color: T.ink2 } }),
+      visualMap: { min: 0, max: max || 1, calculable: false, orient: "horizontal", left: "center", bottom: 0, itemWidth: 10, itemHeight: 140,
+        inRange: { color: T.seq }, textStyle: { color: T.muted, fontSize: 11 }, formatter: (v) => compact(v), text: ["more", "fewer"], textGap: 8 },
+      tooltip: { ...o.tooltip, trigger: "item", formatter: (p) => `<b>${rowsLabels[p.value[1]]}</b>, ${hrs[p.value[0]]}<br>${n(p.value[2])} ${valueLabel}` },
+      series: [{
+        type: "heatmap", data, itemStyle: { borderColor: T.surface, borderWidth: 2, borderRadius: 3 },
+        label: { show: cellW >= 38, fontSize: 10, formatter: (p) => compact(p.value[2]) },
+        emphasis: { itemStyle: { borderColor: T.ink, borderWidth: 1 } },
+      }],
+    });
+    // label ink chosen per cell so it always clears contrast against the fill
+    o.series[0].data = data.map((d) => ({ value: d, label: { color: inkOn(rampAt(d[2] / (max || 1))) } }));
+    ch.setOption(o, true);
+  }
+
+  // Colour of the heatmap ramp at t (0..1), and the label ink that clears contrast on it
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const rampAt = (t) => {
+    const stops = T.seq.map(hexRgb), x = Math.min(Math.max(t, 0), 1) * (stops.length - 1), i = Math.min(Math.floor(x), stops.length - 2), f = x - i;
+    return stops[i].map((v, k) => v + (stops[i + 1][k] - v) * f);
+  };
+  const inkOn = (rgb) => {
+    const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.3 ? "#0f1720" : "#ffffff";
+  };
+
+  function renderHeatmaps(c) {
+    if (!c) return;
+    const usedStages = [...new Set(jDetStage[S.j].values())].sort((a, b) => a - b);
+    heat("cStage", usedStages.map((si) => D.stages[si]), usedStages.map((si) => Array.from(c.stageHour[si], (v) => v / c.nDays)), "vehicles per day");
+    heat("cDay", c.dates.map((d) => fmtDate(d)), c.dates.map((d) => c.dayHour.get(d)), "vehicles");
+  }
+
+  function renderDaily(c) {
+    const colors = { Weekday: T.get("--s1"), Weekend: T.get("--s2") };
+    const o = base();
+    Object.assign(o, {
+      grid: { left: 44, right: 8, top: 36, bottom: 28 },
+      legend: legend(["Weekday", "Weekend"].filter((t) => c.daysByType[t] > 0)),
+      xAxis: catAxis(c.dates.map(fmtShort), { axisLabel: { color: T.muted, interval: "auto" } }),
+      yAxis: valueAxis(),
+      tooltip: { ...o.tooltip, trigger: "item", formatter: (p) => `<b>${fmtDate(c.dates[p.dataIndex])}</b><br>${n(p.value)} vehicles` },
+      series: ["Weekday", "Weekend"].map((t) => ({
+        name: t, type: "bar", stack: "d", barMaxWidth: 24, itemStyle: { color: colors[t], borderRadius: [4, 4, 0, 0] },
+        data: c.dates.map((d) => ((D.dayTypes[d] === "Weekend") === (t === "Weekend") ? Math.round(c.daily.get(d)) : null)),
+      })),
+    });
+    chart("cDaily").setOption(o, true);
+  }
+
+  function renderTop(c) {
+    $("top5").tBodies[0].innerHTML = c.top.length && c.top[0].v > 0
+      ? c.top.map((t, i) => `<tr><td><span class="rank">${i + 1}</span></td><td>${fmtDate(t.di)}</td><td>${HOURS[t.h]}</td><td class="r">${n(t.v)}</td></tr>`).join("")
+      : `<tr><td colspan="4" class="empty-msg">No vehicles in this selection</td></tr>`;
+  }
+
+  // Theme: re-read tokens and redraw when the viewer switches light/dark
+  const rerender = () => { readTokens(); update(); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
+  new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const allDates = D.dates;
+  $("footData").textContent = `${NJ} junction${NJ === 1 ? "" : "s"}, ${allDates[0]} to ${allDates[allDates.length - 1]}, ${n(D.rows.length)} rows`;
+  $("footBuilt").textContent = `Data built ${D.generated}`;
+
+  readTokens();
+  fillDates();
+  renderLayout();
+  update();
+})();
+</script>
