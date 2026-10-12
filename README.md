@@ -19,6 +19,38 @@ Every Excel export in `data/raw/` is merged into one page with filters for junct
    The script prints rows per file, flags duplicate rows (same junction, date, hour, detector and class),
    and writes `dist/traffic-dashboard.html`.
 
+## Clickable detectors on the layout image
+
+Each junction's detectors can appear as clickable pins on its layout image. Positions are set once per junction:
+
+1. Build the dashboard, then open `dist/traffic-dashboard.html` in Chrome or Edge.
+2. Add `#place` to the end of the address (for example `...traffic-dashboard.html#place`) and press Enter.
+3. Choose the junction, then click the image where each detector is, in the order shown (D1, D2, ...).
+   Use **Skip** for detectors you don't want on the map and **Undo** to redo the last click.
+4. Click **Copy text** and paste it into that junction's entry in `data/junctions.json`, after its `"stages"` block:
+
+   ```json
+   "A009": {
+     "name": "...",
+     "layout_image": "layouts/A009.png",
+     "stages": { ... },
+     "detector_positions": {
+       "D1": [20.5, 31.2],
+       "D2": [28.1, 31.0]
+     }
+   }
+   ```
+
+   Remember the comma after the `"stages"` block's closing `}`.
+5. Rebuild. Pins are coloured by stage, and clicking one filters every chart to that detector.
+
+## Downloads
+
+- **PNG** button on each chart: saves the chart with its title, junction, dates and active filters.
+- **Download data (CSV)** in the filter bar: saves the rows behind the current view (opens in Excel).
+
+Downloads work in the shared file and on a hosted link.
+
 ## Share it
 
 `dist/traffic-dashboard.html` is a single file with the data and layout images inside it.

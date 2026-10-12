@@ -115,7 +115,26 @@ select {
 .h260 { height: 260px; } .h300 { height: 300px; } .h320 { height: 320px; }
 
 /* Layout panel */
-.layout-img { border-radius: 8px; border: 1px solid var(--border); background: #fff; overflow: hidden; }
+.layout-img { position: relative; border-radius: 8px; border: 1px solid var(--border); background: #fff; overflow: hidden; }
+.layout-img.placing img { cursor: crosshair; }
+.pins { position: absolute; inset: 0; pointer-events: none; }
+.pin {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: auto;
+  width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid #ffffff; color: #ffffff;
+  font: 600 10px/1 var(--font-ui); display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); transition: transform 0.12s;
+}
+.pin:hover { transform: translate(-50%, -50%) scale(1.15); }
+.pin[aria-pressed="true"] { width: 30px; height: 30px; font-size: 12px; outline: 3px solid var(--accent); outline-offset: 1px; z-index: 2; }
+.pin.dim { opacity: 0.35; }
+.pin.nodata { background: #9aa1ab !important; }
+.place-box { display: grid; gap: 8px; margin-top: 8px; font-size: 12px; border: 1px dashed var(--accent); border-radius: 8px; padding: 10px; background: var(--accent-wash); }
+.place-box textarea { width: 100%; min-height: 96px; font: 11px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mini { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.mini:hover { color: var(--ink); border-color: var(--accent); }
+.mini:disabled { opacity: 0.5; cursor: default; }
+.ph-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .layout-img img { display: block; width: 100%; height: auto; }
 .layout-empty { border: 1px dashed var(--axis); border-radius: 8px; padding: 18px 14px; color: var(--muted); font-size: 12px; text-align: center; }
 .layout-empty code { color: var(--ink-2); }
@@ -206,6 +225,7 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     </div>
     <div class="field" id="detField" hidden><span class="lbl" id="detLbl">Detector</span><button type="button" class="chip" id="detChip"></button></div>
     <div class="spacer"></div>
+    <button type="button" class="ghost" id="dlCsv" title="Download the rows behind the current view, for Excel">Download data (CSV)</button>
     <button type="button" class="ghost" id="reset">Reset filters</button>
   </section>
 
@@ -431,13 +451,149 @@ const DATA = /*__DATA__*/null;
     renderDaily(c);
     renderTop(c);
     renderStageButtons();
+    renderPins();
   }
+
+  // Layout image with clickable detector pins. Open the page with #place at the end of
+  // its address to click each detector's position and get the junctions.json text.
+  const placing = location.hash === "#place";
+  let placed = {}, placeQueue = [], placeAt = 0;
 
   function renderLayout() {
     const j = D.junctions[S.j];
+    placed = { ...(j.positions || {}) };
     $("layout").innerHTML = j.layout
-      ? `<div class="layout-img"><img src="${j.layout}" alt="Layout of junction ${j.code} showing detector positions"></div>`
+      ? `<div class="layout-img${placing ? " placing" : ""}" id="layoutImg"><img src="${j.layout}" alt="Layout of junction ${j.code} showing detector positions"><div class="pins" id="pins"></div></div>${placing ? '<div class="place-box" id="placeBox"></div>' : ""}`
       : `<div class="layout-empty">No layout image yet. Save it as <code>data/layouts/${j.code}.png</code> and add it to <code>data/junctions.json</code>, then rebuild.</div>`;
+    if (placing && j.layout) { placeQueue = [...jDetStage[S.j].keys()].sort((a, b) => a - b); placeAt = 0; renderPlaceBox(); }
+  }
+
+  function renderPins() {
+    const box = $("pins");
+    if (!box || !lastCalc) return;
+    const map = jDetStage[S.j], c = lastCalc;
+    box.innerHTML = Object.entries(placed).map(([name, pos]) => {
+      const d = D.detectors.indexOf(name);
+      if (d < 0 || !map.has(d) || !Array.isArray(pos)) return "";
+      const si = map.get(d), v = c.det[d];
+      const dim = S.det !== null ? S.det !== d : S.stage !== null ? si !== S.stage : false;
+      return `<button type="button" class="pin${v ? "" : " nodata"}${dim ? " dim" : ""}" data-d="${d}" aria-pressed="${S.det === d}" style="left:${pos[0]}%;top:${pos[1]}%;background:${stageColor(si)}" title="${name} · ${D.stages[si]}: ${v ? n(v / c.nDays) + " vehicles per day" : "no data"}">${name.replace(/^D/, "")}</button>`;
+    }).join("");
+  }
+
+  const placeJson = () => '"detector_positions": {\n' + Object.entries(placed).map(([k, [x, y]]) => `  "${k}": [${x}, ${y}]`).join(",\n") + "\n}";
+  function renderPlaceBox() {
+    const box = $("placeBox");
+    if (!box) return;
+    const next = placeQueue[placeAt];
+    box.innerHTML = `<div><b>Placement mode.</b> ${next !== undefined ? `Click the image where <b>${D.detectors[next]}</b> is.` : "All detectors done. Copy the text below into this junction's entry in junctions.json, after its \"stages\" block (add a comma after that block's closing }), then rebuild."}</div>
+      <div class="row">
+        <button type="button" class="mini" data-act="undo" ${placeAt ? "" : "disabled"}>Undo</button>
+        <button type="button" class="mini" data-act="skip" ${next !== undefined ? "" : "disabled"}>Skip ${next !== undefined ? D.detectors[next] : ""}</button>
+        <button type="button" class="mini" data-act="restart">Start again</button>
+        <button type="button" class="mini" data-act="copy">Copy text</button>
+      </div>
+      <textarea id="placeOut" readonly aria-label="Detector positions for junctions.json">${placeJson()}</textarea>`;
+  }
+
+  $("layout").onclick = (e) => {
+    const pin = e.target.closest(".pin");
+    if (pin) return setDet(Number(pin.dataset.d));
+    const act = e.target.closest("[data-act]");
+    if (act) {
+      const a = act.dataset.act;
+      if (a === "undo" && placeAt > 0) { placeAt--; delete placed[D.detectors[placeQueue[placeAt]]]; }
+      if (a === "skip" && placeAt < placeQueue.length) placeAt++;
+      if (a === "restart") { placed = {}; placeAt = 0; }
+      if (a === "copy") {
+        const t = $("placeOut");
+        navigator.clipboard.writeText(t.value).then(() => { act.textContent = "Copied"; }).catch(() => { t.focus(); t.select(); });
+        return;
+      }
+      renderPins(); renderPlaceBox();
+      return;
+    }
+    const img = e.target.closest("#layoutImg img");
+    if (placing && img && placeAt < placeQueue.length) {
+      const r = img.getBoundingClientRect();
+      const x = +(((e.clientX - r.left) / r.width) * 100).toFixed(1), y = +(((e.clientY - r.top) / r.height) * 100).toFixed(1);
+      placed[D.detectors[placeQueue[placeAt]]] = [x, y];
+      placeAt++;
+      renderPins(); renderPlaceBox();
+    }
+  };
+
+  // Downloads: each chart as a PNG with its title, and the filtered rows as CSV
+  const saveFile = (name, href) => { const a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+  const viewText = () => {
+    const j = D.junctions[S.j], ds = lastCalc.dates;
+    const range = ds.length ? (ds.length === 1 ? fmtDate(ds[0], true) : `${fmtShort(ds[0])} – ${fmtShort(ds[ds.length - 1])} ${dateParts[ds[ds.length - 1]].y}`) : "No days";
+    const scope = [S.day !== "All" ? S.day + "s only" : "", S.h0 > 0 || S.h1 < 23 ? `${HOURS[S.h0]} to ${String(S.h1).padStart(2, "0")}:59` : "",
+      S.det !== null ? "Detector " + D.detectors[S.det] : S.stage !== null ? D.stages[S.stage] : ""].filter(Boolean);
+    return [j.code + (j.name ? " · " + j.name : ""), range, ...scope].join("  ·  ");
+  };
+  const fileTag = () => { const ds = lastCalc.dates; return `${D.junctions[S.j].code}_${ds.length ? D.dates[ds[0]] + "_to_" + D.dates[ds[ds.length - 1]] : "none"}`; };
+
+  function chartPng(id, title, btn) {
+    const ch = charts[id];
+    if (!ch) return;
+    const el = $(id), w = el.clientWidth, h = el.clientHeight, scale = 2, head = 54;
+    // Redraw the chart once on an off-screen canvas, since the on-page chart is SVG
+    const tmp = document.createElement("div");
+    tmp.style.cssText = `position:fixed;left:-10000px;top:0;width:${w}px;height:${h}px`;
+    document.body.appendChild(tmp);
+    const off = echarts.init(tmp, null, { renderer: "canvas", devicePixelRatio: scale });
+    off.setOption({ ...ch.getOption(), animation: false });
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = w * scale; cv.height = (h + head) * scale;
+      const g = cv.getContext("2d");
+      g.scale(scale, scale);
+      g.fillStyle = T.surface; g.fillRect(0, 0, w, h + head);
+      g.fillStyle = T.ink; g.font = `600 16px ${T.font}`; g.fillText(title, 12, 24);
+      g.fillStyle = T.muted; g.font = `12px ${T.font}`; g.fillText(viewText(), 12, 43);
+      g.drawImage(img, 0, head, w, h);
+      try { saveFile(`${title.replace(/[^A-Za-z0-9]+/g, "_")}_${fileTag()}.png`, cv.toDataURL("image/png")); }
+      catch { btn.textContent = "Not supported here"; }
+    };
+    img.src = off.getDataURL({ type: "png", pixelRatio: scale, backgroundColor: T.surface });
+    off.dispose();
+    tmp.remove();
+  }
+
+  function downloadCsv() {
+    const c = lastCalc, j = D.junctions[S.j], dateSet = new Set(c.dates);
+    const out = [["Junction", "Date", "Weekday", "Day type", "Hour", "Detector", "Stage", "Class", "Vehicles"]];
+    for (const r of byJ[S.j]) {
+      const di = r[R_DATE], h = r[R_HOUR];
+      if (!dateSet.has(di) || h < S.h0 || h > S.h1) continue;
+      if (S.det !== null && r[R_DET] !== S.det) continue;
+      if (S.stage !== null && r[R_STAGE] !== S.stage) continue;
+      out.push([j.code, D.dates[di], WD[dateParts[di].wd], D.dayTypes[di], HOURS[h], D.detectors[r[R_DET]], D.stages[r[R_STAGE]], classLabel(r[R_CLASS]), +r[R_V].toFixed(2)]);
+    }
+    const cell = (v) => (/[",\r\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v);
+    const csv = "\ufeff" + out.map((row) => row.map(cell).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    saveFile(`traffic_${fileTag()}.csv`, url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+  $("dlCsv").onclick = downloadCsv;
+
+  const DL_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v6.5M3.2 5.5 6 8.3l2.8-2.8M1.5 10.5h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  for (const id of ["cDet", "cHour", "cStage", "cDay", "cDaily"]) {
+    const ph = $(id).closest(".panel").querySelector(".ph");
+    const right = document.createElement("div");
+    right.className = "ph-right";
+    const hint = ph.querySelector(".hint");
+    if (hint) right.append(hint);
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "mini"; b.innerHTML = DL_ICON + "PNG";
+    const title = ph.querySelector("h2").textContent;
+    b.title = `Download "${title}" as an image`;
+    b.onclick = () => chartPng(id, title, b);
+    right.append(b);
+    ph.append(right);
   }
 
   function renderStageButtons() {

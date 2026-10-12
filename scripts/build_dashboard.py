@@ -179,6 +179,7 @@ def main():
                 "name": config.get(j, {}).get("name", ""),
                 "layout": embed_image(config.get(j, {}).get("layout_image")),
                 "stageNotes": config.get(j, {}).get("stages", {}),
+                "positions": config.get(j, {}).get("detector_positions", {}),
             }
             for j in junctions
         ],
