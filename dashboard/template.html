@@ -144,7 +144,6 @@ select {
 .mix .bar { height: 100%; border-radius: 0 4px 4px 0; }
 .mix .num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
 .mix .num small { color: var(--muted); margin-left: 6px; }
-.mix-foot { margin-top: auto; padding-top: 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--grid); }
 
 /* Table */
 .tbl-wrap { overflow-x: auto; }
@@ -236,7 +235,6 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     <article class="panel c4">
       <div class="ph"><h2>Vehicle class mix</h2><p class="hint">Average per day</p></div>
       <ul class="mix" id="mix"></ul>
-      <div class="mix-foot" id="mixFoot"></div>
     </article>
 
     <article class="panel c12">
@@ -527,7 +525,6 @@ const DATA = /*__DATA__*/null;
       <span class="track"><span class="bar" style="display:block;width:${(c.cls[i] / max) * 100}%;background:${classColor(i)}"></span></span>
       <span class="num">${n(c.cls[i] / c.nDays)}<small>${(c.cls[i] / c.total * 100).toFixed(1)}%</small></span></li>`).join("")
       : `<li class="empty-msg" style="display:block">No vehicles in this selection</li>`;
-    $("mixFoot").textContent = D.classes.includes("Unclassified") ? "Unclassified covers hours with no class split. Motorcycle is estimated as 23% of Car + Motorcycle." : "";
   }
 
   function heat(id, rowsLabels, matrix, valueLabel) {
