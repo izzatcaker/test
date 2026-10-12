@@ -59,6 +59,8 @@ body {
 
 /* Header */
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; justify-content: space-between; }
+.logo { background: #ffffff; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; flex: none; }
+.logo img { display: block; height: 46px; width: auto; max-width: 100%; }
 .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .signal { display: flex; gap: 5px; padding: 7px 9px; border-radius: 999px; background: #1a1f26; flex: none; }
 .signal i { width: 10px; height: 10px; border-radius: 50%; display: block; }
@@ -119,7 +121,9 @@ select {
 .layout-empty code { color: var(--ink-2); }
 .stages { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; }
 .stages li { display: grid; gap: 5px; }
-.stages .st { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.stages .st { display: flex; align-items: center; gap: 8px; font: 600 13px/1.3 var(--font-ui); color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 3px 8px 3px 6px; margin-left: -6px; cursor: pointer; text-align: left; }
+.stages .st:hover { border-color: var(--border); background: var(--bg); }
+.stages .st[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
 .stages .st i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .stages .st small { font-weight: 400; color: var(--muted); font-size: 12px; }
 .dets { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 18px; }
@@ -133,7 +137,7 @@ select {
 
 /* Class mix */
 .mix { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 12px; }
-.mix li { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: center; }
+.mix li { display: grid; grid-template-columns: 124px 1fr auto; gap: 10px; align-items: center; }
 .mix .name { display: flex; align-items: center; gap: 7px; font-size: 13px; }
 .mix .name i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .mix .track { height: 10px; background: var(--grid); border-radius: 0 4px 4px 0; overflow: hidden; }
@@ -166,7 +170,8 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
   .kpi.hero { grid-column: span 2; }
   .kpi .val { font-size: 24px; } .kpi.hero .val { font-size: 36px; }
   .spacer { display: none; }
-  .mix li { grid-template-columns: 88px 1fr auto; }
+  .mix li { grid-template-columns: 104px 1fr auto; }
+  .logo img { height: 36px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
@@ -180,6 +185,7 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
         <div class="sub" id="sub"></div>
       </div>
     </div>
+    <div class="logo" id="logo" hidden></div>
   </header>
 
   <p class="load-error" id="openHelp"><strong>This preview can't show the charts.</strong> Download this file, then open it in Google Chrome, Microsoft Edge or Safari. Email and phone previews block the part of the page that draws the numbers and charts.</p>
@@ -199,7 +205,7 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     <div class="field"><span class="lbl">Hours</span>
       <div class="pair"><select id="fH0" aria-label="From hour"></select>to<select id="fH1" aria-label="To hour"></select></div>
     </div>
-    <div class="field" id="detField" hidden><span class="lbl">Detector</span><button type="button" class="chip" id="detChip"></button></div>
+    <div class="field" id="detField" hidden><span class="lbl" id="detLbl">Detector</span><button type="button" class="chip" id="detChip"></button></div>
     <div class="spacer"></div>
     <button type="button" class="ghost" id="reset">Reset filters</button>
   </section>
@@ -209,17 +215,17 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     <div class="kpi"><span class="lbl">Average per day</span><span class="val" id="kAvg">–</span><span class="note" id="kAvgNote"></span></div>
     <div class="kpi"><span class="lbl">Busiest hour</span><span class="val" id="kPeak">–</span><span class="note" id="kPeakNote"></span></div>
     <div class="kpi"><span class="lbl">Busiest detector</span><span class="val" id="kDet">–</span><span class="note" id="kDetNote"></span></div>
-    <div class="kpi"><span class="lbl">Heavy vehicles (MID + BIG)</span><span class="val" id="kHeavy">–</span><span class="note" id="kHeavyNote"></span></div>
+    <div class="kpi"><span class="lbl">Lorries and buses</span><span class="val" id="kHeavy">–</span><span class="note" id="kHeavyNote"></span></div>
   </section>
 
   <section class="grid">
     <article class="panel c4">
-      <div class="ph"><h2>Junction layout</h2><p class="hint">Pick a detector to filter</p></div>
+      <div class="ph"><h2>Junction layout</h2><p class="hint">Pick a stage or detector to filter</p></div>
       <div id="layout"></div>
       <ul class="stages" id="stages"></ul>
     </article>
     <article class="panel c8">
-      <div class="ph"><h2>Average daily volume by detector</h2><p class="hint">Coloured by stage. Click a bar to filter</p></div>
+      <div class="ph"><h2>Average daily volume by detector</h2><p class="hint">Coloured by stage. Click a bar or stage to filter</p></div>
       <div class="chart h320" id="cDet"></div>
     </article>
 
@@ -304,11 +310,14 @@ const DATA = /*__DATA__*/null;
   };
   const stageColor = (si) => T.get(STAGE_TOKEN(D.stages[si]));
   const classColor = (ci) => T.get(CLASS_TOKEN(D.classes[ci]));
+  // Data keeps the survey class codes; these are the names shown to readers
+  const CLASS_LABEL = { SML: "Car", MID: "Medium Lorry", BIG: "Heavy Lorry/Bus" };
+  const classLabel = (ci) => CLASS_LABEL[D.classes[ci]] || D.classes[ci];
 
   // State
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
-  const S = { j: 0, d0: 0, d1: 0, day: "All", h0: 0, h1: 23, det: null };
-  const resetForJunction = () => { const ds = jDates[S.j]; S.d0 = ds[0]; S.d1 = ds[ds.length - 1]; S.det = null; };
+  const S = { j: 0, d0: 0, d1: 0, day: "All", h0: 0, h1: 23, det: null, stage: null };
+  const resetForJunction = () => { const ds = jDates[S.j]; S.d0 = ds[0]; S.d1 = ds[ds.length - 1]; S.det = null; S.stage = null; };
   const saved = Number(store.get("tv-junction"));
   if (Number.isInteger(saved) && saved >= 0 && saved < NJ) S.j = saved;
   resetForJunction();
@@ -324,9 +333,11 @@ const DATA = /*__DATA__*/null;
   const syncControls = () => {
     fJ.value = S.j; fFrom.value = S.d0; fTo.value = S.d1; fH0.value = S.h0; fH1.value = S.h1;
     for (const b of $("fDay").children) b.setAttribute("aria-pressed", String(b.dataset.v === S.day));
-    $("detField").hidden = S.det === null;
-    if (S.det !== null) $("detChip").innerHTML = `${D.detectors[S.det]} <span aria-hidden="true">×</span>`;
-    $("detChip").setAttribute("aria-label", S.det === null ? "" : `Clear detector filter ${D.detectors[S.det]}`);
+    const picked = S.det !== null ? D.detectors[S.det] : S.stage !== null ? D.stages[S.stage] : null;
+    $("detField").hidden = picked === null;
+    $("detLbl").textContent = S.det !== null ? "Detector" : "Stage";
+    if (picked !== null) $("detChip").innerHTML = `${picked} <span aria-hidden="true">×</span>`;
+    $("detChip").setAttribute("aria-label", picked === null ? "" : `Clear filter ${picked}`);
   };
   fJ.onchange = () => { S.j = Number(fJ.value); store.set("tv-junction", String(S.j)); resetForJunction(); fillDates(); renderLayout(); update(); };
   fFrom.onchange = () => { S.d0 = Number(fFrom.value); if (S.d1 < S.d0) S.d1 = S.d0; update(); };
@@ -334,9 +345,10 @@ const DATA = /*__DATA__*/null;
   fH0.onchange = () => { S.h0 = Number(fH0.value); if (S.h1 < S.h0) S.h1 = S.h0; update(); };
   fH1.onchange = () => { S.h1 = Number(fH1.value); if (S.h0 > S.h1) S.h0 = S.h1; update(); };
   $("fDay").onclick = (e) => { const b = e.target.closest("button"); if (b) { S.day = b.dataset.v; update(); } };
-  $("detChip").onclick = () => setDet(null);
+  $("detChip").onclick = () => { S.det = null; S.stage = null; update(); };
   $("reset").onclick = () => { S.day = "All"; S.h0 = 0; S.h1 = 23; resetForJunction(); update(); };
-  const setDet = (d) => { S.det = S.det === d ? null : d; update(); };
+  const setDet = (d) => { S.det = S.det === d ? null : d; S.stage = null; update(); };
+  const setStage = (si) => { S.stage = S.stage === si ? null : si; S.det = null; update(); };
 
   // Charts
   const charts = {};
@@ -372,6 +384,7 @@ const DATA = /*__DATA__*/null;
       const v = r[R_V];
       det[r[R_DET]] += v; // detector chart ignores the detector filter so every bar stays visible
       if (S.det !== null && r[R_DET] !== S.det) continue;
+      if (S.stage !== null && r[R_STAGE] !== S.stage) continue;
       total += v;
       cls[r[R_CLASS]] += v;
       const t = D.dayTypes[di] === "Weekend" ? "Weekend" : "Weekday";
@@ -403,8 +416,10 @@ const DATA = /*__DATA__*/null;
     let ph = S.h0; for (let h = S.h0; h <= S.h1; h++) if (c.hourAll[h] > c.hourAll[ph]) ph = h;
     $("kPeak").textContent = c.total ? HOURS[ph] : "–";
     $("kPeakNote").textContent = c.total ? `${n(c.hourAll[ph] / c.nDays)} vehicles per day on average` : "";
-    let bd = 0; for (let i = 0; i < c.det.length; i++) if (c.det[i] > c.det[bd]) bd = i;
+    const inScope = (i) => S.stage === null || jDetStage[S.j].get(i) === S.stage;
+    let bd = -1; for (let i = 0; i < c.det.length; i++) if (inScope(i) && (bd < 0 || c.det[i] > c.det[bd])) bd = i;
     const detTotal = c.det.reduce((a, b) => a + b, 0);
+    if (bd < 0) bd = 0;
     $("kDet").textContent = detTotal ? D.detectors[bd] : "–";
     $("kDetNote").textContent = detTotal ? `${n(c.det[bd] / c.nDays)} per day, ${Math.round((c.det[bd] / detTotal) * 100)}% of traffic` : "";
     const heavy = D.classes.reduce((a, name, i) => a + (name === "MID" || name === "BIG" ? c.cls[i] : 0), 0);
@@ -436,11 +451,14 @@ const DATA = /*__DATA__*/null;
       const dets = [...map.entries()].filter(([, s]) => s === si).map(([d]) => d).sort((a, b) => a - b);
       if (!dets.length) return "";
       const note = j.stageNotes[st] || "";
-      return `<li><div class="st"><i style="background:${stageColor(si)}"></i>${st}${note ? ` <small>${note}</small>` : ""}</div>
+      return `<li><button type="button" class="st" data-s="${si}" aria-pressed="${S.stage === si}" title="Show only ${st}"><i style="background:${stageColor(si)}"></i>${st}${note ? ` <small>${note}</small>` : ""}</button>
         <div class="dets">${dets.map((d) => `<button type="button" data-d="${d}" aria-pressed="${S.det === d}" class="${c.det[d] ? "" : "nodata"}" title="${c.det[d] ? n(c.det[d] / c.nDays) + " per day" : "No vehicles recorded"}">${D.detectors[d]}</button>`).join("")}</div></li>`;
     }).join("");
   }
-  $("stages").onclick = (e) => { const b = e.target.closest("button[data-d]"); if (b) setDet(Number(b.dataset.d)); };
+  $("stages").onclick = (e) => {
+    const d = e.target.closest("button[data-d]"); if (d) return setDet(Number(d.dataset.d));
+    const st = e.target.closest("button[data-s]"); if (st) setStage(Number(st.dataset.s));
+  };
 
   function renderDetectors(c) {
     const map = jDetStage[S.j];
@@ -453,7 +471,8 @@ const DATA = /*__DATA__*/null;
       data: idx.map((i) => {
         if (map.get(i) !== si) return null;
         const v = c.det[i] / c.nDays;
-        return { value: v, itemStyle: { opacity: S.det === null || S.det === i ? 1 : 0.25 } };
+        const on = S.det !== null ? S.det === i : S.stage !== null ? si === S.stage : true;
+        return { value: v, itemStyle: { opacity: on ? 1 : 0.25 } };
       }),
       label: { show: $("cDet").clientWidth >= 600, position: "top", color: T.muted, fontSize: 11, formatter: (p) => (p.value >= 1 ? compact(p.value) : "no data") },
     }));
@@ -472,6 +491,8 @@ const DATA = /*__DATA__*/null;
     ch.setOption(o, true);
     ch.off("click");
     ch.on("click", (p) => setDet(idx[p.dataIndex]));
+    ch.off("legendselectchanged");
+    ch.on("legendselectchanged", (p) => setStage(D.stages.indexOf(p.name)));
   }
 
   function renderHourly(c) {
@@ -502,11 +523,11 @@ const DATA = /*__DATA__*/null;
     const max = Math.max(...c.cls, 1);
     const order = D.classes.map((_, i) => i).sort((a, b) => c.cls[b] - c.cls[a]).filter((i) => c.cls[i] > 0);
     $("mix").innerHTML = order.length ? order.map((i) => `<li>
-      <span class="name"><i style="background:${classColor(i)}"></i>${D.classes[i]}</span>
+      <span class="name"><i style="background:${classColor(i)}"></i>${classLabel(i)}</span>
       <span class="track"><span class="bar" style="display:block;width:${(c.cls[i] / max) * 100}%;background:${classColor(i)}"></span></span>
       <span class="num">${n(c.cls[i] / c.nDays)}<small>${(c.cls[i] / c.total * 100).toFixed(1)}%</small></span></li>`).join("")
       : `<li class="empty-msg" style="display:block">No vehicles in this selection</li>`;
-    $("mixFoot").textContent = D.classes.includes("Unclassified") ? "Unclassified covers hours with no class split. Motorcycle is estimated as 23% of SML + MC." : "";
+    $("mixFoot").textContent = D.classes.includes("Unclassified") ? "Unclassified covers hours with no class split. Motorcycle is estimated as 23% of Car + Motorcycle." : "";
   }
 
   function heat(id, rowsLabels, matrix, valueLabel) {
@@ -590,6 +611,8 @@ const DATA = /*__DATA__*/null;
   const allDates = D.dates;
   $("footData").textContent = `${NJ} junction${NJ === 1 ? "" : "s"}, ${allDates[0]} to ${allDates[allDates.length - 1]}, ${n(D.rows.length)} rows`;
   $("footBuilt").textContent = `Data built ${D.generated}`;
+
+  if (D.logo) { $("logo").innerHTML = `<img src="${D.logo}" alt="Southmax">`; $("logo").hidden = false; }
 
   readTokens();
   fillDates();

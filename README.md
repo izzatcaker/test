@@ -38,6 +38,7 @@ Every Excel export in `data/raw/` is merged into one page with filters for junct
 | `data/raw/` | Excel or CSV exports, one or more per junction |
 | `data/junctions.json` | Junction names, stage notes and layout image paths |
 | `data/layouts/` | Junction layout images |
+| `data/logo.png` | Company logo shown top right (optional; remove it to hide the logo) |
 | `dashboard/template.html` | Dashboard page (layout, styles, charts) |
 | `dashboard/vendor/echarts.min.js` | Chart library (ECharts 5.5.1), embedded into the built page |
 | `scripts/build_dashboard.py` | Merges the data and builds the page |

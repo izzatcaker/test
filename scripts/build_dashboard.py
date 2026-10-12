@@ -65,12 +65,13 @@ def ordered(values, preferred):
     return known + sorted(v for v in values if v not in preferred)
 
 
-def embed_image(rel):
+def embed_image(rel, quiet=False):
     if not rel:
         return None
     p = ROOT / "data" / rel
     if not p.exists():
-        print(f"  note: layout image {p.relative_to(ROOT)} not found, the panel will show stage notes only")
+        if not quiet:
+            print(f"  note: layout image {p.relative_to(ROOT)} not found, the panel will show stage notes only")
         return None
     mime = mimetypes.guess_type(p.name)[0] or "image/png"
     return f"data:{mime};base64,{base64.b64encode(p.read_bytes()).decode()}"
@@ -171,6 +172,7 @@ def main():
 
     payload = {
         "generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "logo": embed_image("logo.png", quiet=True) or embed_image("logo.jpg", quiet=True),
         "junctions": [
             {
                 "code": j,
