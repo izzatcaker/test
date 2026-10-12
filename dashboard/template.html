@@ -182,6 +182,8 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     </div>
   </header>
 
+  <p class="load-error" id="openHelp"><strong>This preview can't show the charts.</strong> Download this file, then open it in Google Chrome, Microsoft Edge or Safari. Email and phone previews block the part of the page that draws the numbers and charts.</p>
+
   <section class="filters" aria-label="Filters">
     <div class="field"><label for="fJunction">Junction</label><select id="fJunction"></select></div>
     <div class="field"><span class="lbl">Dates</span>
@@ -593,5 +595,6 @@ const DATA = /*__DATA__*/null;
   fillDates();
   renderLayout();
   update();
+  $("openHelp").hidden = true;
 })();
 </script>
