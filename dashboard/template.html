@@ -115,6 +115,8 @@ select {
 .c4 { grid-column: span 4; } .c5 { grid-column: span 5; } .c7 { grid-column: span 7; } .c8 { grid-column: span 8; } .c12 { grid-column: span 12; }
 .chart { width: 100%; min-height: 0; }
 .h260 { height: 260px; } .h300 { height: 300px; } .h320 { height: 320px; }
+/* Fills the rest of its panel, so it matches a taller neighbour in the same row */
+.fill { flex: 1 1 auto; height: auto; min-height: 320px; }
 
 /* Layout panel */
 .layout-img { position: relative; border-radius: 8px; border: 1px solid var(--border); background: #fff; overflow: hidden; }
@@ -249,7 +251,7 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     </article>
     <article class="panel c8">
       <div class="ph"><h2>Average daily volume by detector</h2><p class="hint">Coloured by stage. Click a bar or stage to filter</p></div>
-      <div class="chart h320" id="cDet"></div>
+      <div class="chart fill" id="cDet"></div>
     </article>
 
     <article class="panel c8">
@@ -376,6 +378,11 @@ const DATA = /*__DATA__*/null;
   const charts = {};
   const chart = (id) => charts[id] || (charts[id] = echarts.init($(id), null, { renderer: "svg" }));
   window.addEventListener("resize", () => { Object.values(charts).forEach((c) => c.resize()); renderHeatmaps(lastCalc); });
+  // Charts whose height follows their panel (layout image loading, switching junction)
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver((entries) => entries.forEach((e) => charts[e.target.id] && charts[e.target.id].resize()));
+    document.querySelectorAll(".chart.fill").forEach((el) => ro.observe(el));
+  }
   const base = () => ({
     animationDuration: 300, textStyle: { fontFamily: T.font, color: T.ink2 },
     tooltip: { backgroundColor: T.surface, borderColor: T.axis, borderWidth: 1, textStyle: { color: T.ink, fontSize: 12, fontFamily: T.font }, extraCssText: "box-shadow:0 4px 14px rgba(0,0,0,.15);border-radius:8px;" },
