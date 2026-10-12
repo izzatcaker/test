@@ -206,6 +206,9 @@ def main():
     if not args.fragment:
         page = '<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n' + page + "\n</html>\n"
     args.out.write_text(page, encoding="utf-8")
+    if not args.fragment and args.out.name != "index.html":
+        # Same page as index.html, so a hosted dist folder opens at its plain link
+        (args.out.parent / "index.html").write_text(page, encoding="utf-8")
 
     total = sum(r["vehicles"] for r in records)
     print(

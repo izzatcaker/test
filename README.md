@@ -27,7 +27,9 @@ Every Excel export in `data/raw/` is merged into one page with filters for junct
   built into the file; only the fonts need internet, and it falls back to system fonts without it).
 - **Link with login:** host it on Cloudflare Pages and add Cloudflare Access (free for up to 50 users)
   so the client signs in with their email.
-- **Public link:** GitHub Pages or Netlify. Anyone with the link can see the data.
+- **Public link (works on phones):** drag the `dist` folder onto https://app.netlify.com/drop.
+  The build also writes `dist/index.html`, so the site opens at its plain link. Anyone with the link can see the data.
+- Phones can't open the HTML as an email or WhatsApp attachment (previews don't run scripts), so send phone users a link.
 
 ## Files
 
