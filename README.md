@@ -47,7 +47,8 @@ Each junction's detectors can appear as clickable pins on its layout image. Posi
 ## Downloads
 
 - **PNG** button on each chart: saves the chart with its title, junction, dates and active filters.
-- **Download data (CSV)** in the filter bar: saves the rows behind the current view (opens in Excel).
+- **Download Excel** in the filter bar: saves an .xlsx of the current view, with a Summary sheet
+  (totals, detectors, vehicle classes, hourly averages) and a Data sheet (every row, with filter arrows).
 
 Downloads work in the shared file and on a hosted link.
 

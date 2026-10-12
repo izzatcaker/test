@@ -225,7 +225,7 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     </div>
     <div class="field" id="detField" hidden><span class="lbl" id="detLbl">Detector</span><button type="button" class="chip" id="detChip"></button></div>
     <div class="spacer"></div>
-    <button type="button" class="ghost" id="dlCsv" title="Download the rows behind the current view, for Excel">Download data (CSV)</button>
+    <button type="button" class="ghost" id="dlXlsx" title="Download the current view as an Excel file">Download Excel</button>
     <button type="button" class="ghost" id="reset">Reset filters</button>
   </section>
 
@@ -562,23 +562,107 @@ const DATA = /*__DATA__*/null;
     tmp.remove();
   }
 
-  function downloadCsv() {
+  // Excel export: a real .xlsx (zip of XML parts) with a Summary sheet and a Data sheet
+  const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (b) => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  function zipStore(files) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    let offset = 0;
+    for (const f of files) {
+      const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(12, 0x21, true);
+      h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+      parts.push(h, name, data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(14, 0x21, true);
+      c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true); c.setUint32(42, offset, true);
+      central.push(c, name);
+      offset += 30 + name.length + data.length;
+    }
+    const size = central.reduce((a, p) => a + p.byteLength, 0);
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, e], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
+  // Cell styles: 0 normal, 1 bold, 2 date, 3 whole number, 4 two decimals, 5 percent, 6 bold title
+  const X_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="ddd dd mmm yyyy"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const xEsc = (v) => String(v).replace(/[<>&"]/g, (ch) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[ch]);
+  const colName = (i) => { let s = ""; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; };
+  // rows: arrays of cells; a cell is a string, a number, or { v, s } with a style index
+  function sheetXml(rows, widths, table) {
+    const data = rows.map((row, r) => `<row r="${r + 1}">${row.map((cell, c) => {
+      if (cell === null || cell === undefined || cell === "") return "";
+      let v = cell, st = table && r === 0 ? 1 : 0;
+      if (typeof cell === "object") { v = cell.v; st = cell.s; }
+      const ref = colName(c) + (r + 1), sa = st ? ` s="${st}"` : "";
+      return typeof v === "number" ? `<c r="${ref}"${sa}><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"${sa}><is><t xml:space="preserve">${xEsc(v)}</t></is></c>`;
+    }).join("")}</row>`).join("");
+    const view = table ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : `<sheetViews><sheetView workbookViewId="0"/></sheetViews>`;
+    const cols = `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>`;
+    const filter = table ? `<autoFilter ref="A1:${colName(rows[0].length - 1)}${rows.length}"/>` : "";
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${view}${cols}<sheetData>${data}</sheetData>${filter}</worksheet>`;
+  }
+
+  function downloadExcel() {
     const c = lastCalc, j = D.junctions[S.j], dateSet = new Set(c.dates);
-    const out = [["Junction", "Date", "Weekday", "Day type", "Hour", "Detector", "Stage", "Class", "Vehicles"]];
+    const serial = (di) => { const p = dateParts[di]; return Date.UTC(p.y, p.m - 1, p.d) / 86400000 + 25569; };
+    const B = (v) => ({ v, s: 1 }), N = (v) => ({ v: Math.round(v), s: 3 });
+
+    const data = [["Junction", "Date", "Weekday", "Day type", "Hour", "Detector", "Stage", "Class", "Vehicles"]];
     for (const r of byJ[S.j]) {
       const di = r[R_DATE], h = r[R_HOUR];
       if (!dateSet.has(di) || h < S.h0 || h > S.h1) continue;
       if (S.det !== null && r[R_DET] !== S.det) continue;
       if (S.stage !== null && r[R_STAGE] !== S.stage) continue;
-      out.push([j.code, D.dates[di], WD[dateParts[di].wd], D.dayTypes[di], HOURS[h], D.detectors[r[R_DET]], D.stages[r[R_STAGE]], classLabel(r[R_CLASS]), +r[R_V].toFixed(2)]);
+      data.push([j.code, { v: serial(di), s: 2 }, WD[dateParts[di].wd], D.dayTypes[di], HOURS[h], D.detectors[r[R_DET]], D.stages[r[R_STAGE]], classLabel(r[R_CLASS]), { v: +r[R_V].toFixed(2), s: 4 }]);
     }
-    const cell = (v) => (/[",\r\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v);
-    const csv = "\ufeff" + out.map((row) => row.map(cell).join(",")).join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    saveFile(`traffic_${fileTag()}.csv`, url);
+
+    const [, range, ...scope] = viewText().split("  ·  ");
+    const map = jDetStage[S.j];
+    const sum = [
+      [{ v: "Junction traffic volume", s: 6 }],
+      [B("Junction"), j.code + (j.name ? " · " + j.name : "")],
+      [B("Dates"), range],
+      [B("Filters"), scope.length ? scope.join(", ") : "None"],
+      [B("Exported"), new Date().toLocaleString("en-GB")],
+      [],
+      [B("Total vehicles"), N(c.total)],
+      [B("Average per day"), N(c.total / c.nDays)],
+      [B("Days"), c.dates.length],
+      [],
+      [B("Detector"), B("Stage"), B("Average per day"), B("Total")],
+      ...[...map.keys()].sort((a, b) => a - b)
+        .filter((d) => (S.det === null || S.det === d) && (S.stage === null || map.get(d) === S.stage))
+        .map((d) => [D.detectors[d], D.stages[map.get(d)], N(c.det[d] / c.nDays), N(c.det[d])]),
+      [],
+      [B("Vehicle class"), B("Average per day"), B("Share")],
+      ...D.classes.map((_, i) => i).filter((i) => c.cls[i] > 0).sort((a, b) => c.cls[b] - c.cls[a])
+        .map((i) => [classLabel(i), N(c.cls[i] / c.nDays), { v: c.total ? c.cls[i] / c.total : 0, s: 5 }]),
+      [],
+      [B("Hour"), B("Weekday average"), B("Weekend average")],
+      ...HOURS.slice(S.h0, S.h1 + 1).map((lbl, k) => {
+        const h = S.h0 + k;
+        return [lbl, c.daysByType.Weekday ? N(c.hourByType.Weekday[h] / c.daysByType.Weekday) : "", c.daysByType.Weekend ? N(c.hourByType.Weekend[h] / c.daysByType.Weekend) : ""];
+      }),
+    ];
+
+    const ns = "http://schemas.openxmlformats.org/";
+    const blob = zipStore([
+      { name: "[Content_Types].xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="${ns}package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>` },
+      { name: "_rels/.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${ns}package/2006/relationships"><Relationship Id="rId1" Type="${ns}officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+      { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="${ns}spreadsheetml/2006/main" xmlns:r="${ns}officeDocument/2006/relationships"><sheets><sheet name="Summary" sheetId="1" r:id="rId1"/><sheet name="Data" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="1" hidden="1">Data!$A$1:$I$${data.length}</definedName></definedNames></workbook>` },
+      { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${ns}package/2006/relationships"><Relationship Id="rId1" Type="${ns}officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${ns}officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="${ns}officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { name: "xl/styles.xml", data: X_STYLES },
+      { name: "xl/worksheets/sheet1.xml", data: sheetXml(sum, [22, 46, 18, 14], false) },
+      { name: "xl/worksheets/sheet2.xml", data: sheetXml(data, [10, 18, 10, 10, 8, 10, 10, 18, 10], true) },
+    ]);
+    const url = URL.createObjectURL(blob);
+    saveFile(`traffic_${fileTag()}.xlsx`, url);
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
-  $("dlCsv").onclick = downloadCsv;
+  $("dlXlsx").onclick = downloadExcel;
 
   const DL_ICON = '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v6.5M3.2 5.5 6 8.3l2.8-2.8M1.5 10.5h9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   for (const id of ["cDet", "cHour", "cStage", "cDay", "cDaily"]) {
