@@ -130,7 +130,20 @@ def main():
             msg += f", {dupes:,} duplicate rows ignored (already in an earlier file)"
         print(msg)
 
-    config = json.loads(args.config.read_text(encoding="utf-8")) if args.config.exists() else {}
+    config = {}
+    if args.config.exists():
+        text = args.config.read_text(encoding="utf-8-sig")
+        try:
+            config = json.loads(text)
+        except json.JSONDecodeError as e:
+            lines = text.splitlines()
+            show = "\n".join(f"  {n:>3} | {lines[n - 1]}" for n in range(max(1, e.lineno - 2), min(len(lines), e.lineno) + 1))
+            hint = ""
+            if "delimiter" in e.msg:
+                hint = "\nMost likely a comma is missing at the end of the line just above, for example } should be },"
+            elif "property name" in e.msg or "Expecting value" in e.msg:
+                hint = "\nMost likely there is an extra comma before a closing } or a missing \"quote\"."
+            sys.exit(f"\n{args.config.name} has a mistake near line {e.lineno} ({e.msg}):\n{show}{hint}\nFix it in Notepad, or paste the file into https://jsonlint.com to find it.")
 
     junctions = sorted({r["junction"] for r in records})
     dates = sorted({r["date"] for r in records})
