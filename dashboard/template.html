@@ -94,6 +94,8 @@ select {
 .ghost { border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 7px 12px; cursor: pointer; color: var(--ink-2); }
 .ghost:hover, .seg button:hover { color: var(--ink); }
 .spacer { flex: 1 1 0; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#fJunction { width: 300px; max-width: 100%; text-overflow: ellipsis; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* KPIs */
@@ -225,8 +227,10 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
     </div>
     <div class="field" id="detField" hidden><span class="lbl" id="detLbl">Detector</span><button type="button" class="chip" id="detChip"></button></div>
     <div class="spacer"></div>
-    <button type="button" class="ghost" id="dlXlsx" title="Download the current view as an Excel file">Download Excel</button>
-    <button type="button" class="ghost" id="reset">Reset filters</button>
+    <div class="actions">
+      <button type="button" class="ghost" id="dlXlsx" title="Download the current view as an Excel file">Download Excel</button>
+      <button type="button" class="ghost" id="reset">Reset filters</button>
+    </div>
   </section>
 
   <section class="kpis" aria-label="Summary">

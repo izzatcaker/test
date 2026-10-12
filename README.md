@@ -5,7 +5,9 @@ Every Excel export in `data/raw/` is merged into one page with filters for junct
 
 ## Update the data
 
-1. Put each junction's Excel export (same columns as the Looker file) in `data/raw/`.
+1. Put each junction's Excel export in `data/raw/`. The file needs a sheet with the columns
+   `Date, Hour, Detector, Stage, Class, Vehicles, Junction` (extra columns and extra sheets, such as
+   summaries, are ignored; `Day_Type` and `Detector_Sort` are filled in when missing).
    Any number of files works, and a file can hold one or several junctions or weeks.
 2. For each new junction, add an entry to `data/junctions.json` with its name and stage notes.
    Save its layout image as `data/layouts/<code>.png` (for example `A009.png`).

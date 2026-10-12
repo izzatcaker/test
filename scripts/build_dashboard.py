@@ -20,13 +20,15 @@ import csv
 import datetime as dt
 import json
 import mimetypes
+import re
 import sys
 from pathlib import Path
 
 import openpyxl
 
 ROOT = Path(__file__).resolve().parent.parent
-REQUIRED = ["Date", "Day_Type", "Hour", "Detector", "Detector_Sort", "Stage", "Class", "Vehicles", "Junction"]
+# Day_Type and Detector_Sort are optional: they are worked out from the date and detector name when missing
+REQUIRED = ["Date", "Hour", "Detector", "Stage", "Class", "Vehicles", "Junction"]
 STAGE_ORDER = ["Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5", "No stage"]
 CLASS_ORDER = ["SML", "Motorcycle", "MID", "BIG", "Unclassified"]
 
@@ -37,13 +39,27 @@ def read_rows(path):
             yield from csv.DictReader(f)
         return
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb["Data"] if "Data" in wb.sheetnames else wb.worksheets[0]
-    it = ws.iter_rows(values_only=True)
-    header = [str(h).strip() if h is not None else "" for h in next(it)]
-    for row in it:
-        if row is None or all(v is None for v in row):
-            continue
-        yield dict(zip(header, row))
+    # Use the first sheet (preferring one named "Data") whose header row, within its first
+    # 10 rows, has every required column. Summary and chart sheets are skipped.
+    sheets = sorted(wb.worksheets, key=lambda ws: ws.title != "Data")
+    for ws in sheets:
+        it = ws.iter_rows(values_only=True)
+        for _, row in zip(range(10), it):
+            header = [str(h).strip() if h is not None else "" for h in (row or ())]
+            if all(c in header for c in REQUIRED):
+                if ws.title != "Data":
+                    print(f"  {path.name}: reading sheet \"{ws.title}\"")
+                for row in it:
+                    if row is None or all(v is None for v in row):
+                        continue
+                    yield dict(zip(header, row))
+                return
+    sys.exit(f"{path.name}: no sheet has the columns {', '.join(REQUIRED)} (sheets: {', '.join(wb.sheetnames)})")
+
+
+def detector_sort(name):
+    m = re.search(r"\d+", name)
+    return f"{name[:m.start()]}{int(m.group()):03d}" if m else name
 
 
 def to_date(v):
@@ -103,14 +119,16 @@ def main():
                 rec = {
                     "junction": str(r["Junction"]).strip(),
                     "date": to_date(r["Date"]),
-                    "day_type": str(r["Day_Type"]).strip(),
+                    "day_type": None,
                     "hour": int(float(r["Hour"])),
                     "detector": str(r["Detector"]).strip(),
-                    "det_sort": str(r["Detector_Sort"]).strip(),
+                    "det_sort": None,
                     "stage": str(r["Stage"]).strip(),
                     "cls": str(r["Class"]).strip(),
                     "vehicles": float(r["Vehicles"] or 0),
                 }
+                rec["day_type"] = str(r.get("Day_Type") or ("Weekend" if rec["date"].weekday() >= 5 else "Weekday")).strip()
+                rec["det_sort"] = detector_sort(rec["detector"])
             except (ValueError, TypeError) as e:
                 print(f"  {path.name} row {i}: skipped ({e})")
                 problems += 1
