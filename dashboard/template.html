@@ -59,6 +59,9 @@ body {
 
 /* Header */
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; justify-content: space-between; }
+.top-right { display: flex; align-items: center; gap: 12px; }
+.theme-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); }
+.theme-btn svg { flex: none; }
 .logo { background: #ffffff; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; flex: none; }
 .logo img { display: block; height: 46px; width: auto; max-width: 100%; }
 .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -207,7 +210,10 @@ td .rank { display: inline-grid; place-items: center; width: 22px; height: 22px;
         <div class="sub" id="sub"></div>
       </div>
     </div>
-    <div class="logo" id="logo" hidden></div>
+    <div class="top-right">
+      <button type="button" class="ghost theme-btn" id="themeBtn"></button>
+      <div class="logo" id="logo" hidden></div>
+    </div>
   </header>
 
   <p class="load-error" id="openHelp"><strong>This preview can't show the charts.</strong> Download this file, then open it in Google Chrome, Microsoft Edge or Safari. Email and phone previews block the part of the page that draws the numbers and charts.</p>
@@ -340,6 +346,21 @@ const DATA = /*__DATA__*/null;
 
   // State
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+  // Light / dark: follows the device until the viewer picks one, then remembers the choice
+  const root = document.documentElement, darkMq = window.matchMedia("(prefers-color-scheme: dark)");
+  const savedTheme = store.get("tv-theme");
+  if (savedTheme === "light" || savedTheme === "dark") root.dataset.theme = savedTheme;
+  const isDark = () => (root.dataset.theme ? root.dataset.theme === "dark" : darkMq.matches);
+  const SUN = '<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v1.8M8 13.2V15M1 8h1.8M13.2 8H15M3 3l1.3 1.3M11.7 11.7 13 13M3 13l1.3-1.3M11.7 4.3 13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  const MOON = '<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  const syncThemeBtn = () => {
+    const dark = isDark();
+    $("themeBtn").innerHTML = dark ? `${SUN}Light` : `${MOON}Dark`;
+    $("themeBtn").setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+  };
+  $("themeBtn").onclick = () => { const next = isDark() ? "light" : "dark"; root.dataset.theme = next; store.set("tv-theme", next); };
+  syncThemeBtn();
   const S = { j: 0, d0: 0, d1: 0, day: "All", h0: 0, h1: 23, det: null, stage: null };
   const resetForJunction = () => { const ds = jDates[S.j]; S.d0 = ds[0]; S.d1 = ds[ds.length - 1]; S.det = null; S.stage = null; };
   const saved = Number(store.get("tv-junction"));
@@ -852,7 +873,7 @@ const DATA = /*__DATA__*/null;
   }
 
   // Theme: re-read tokens and redraw when the viewer switches light/dark
-  const rerender = () => { readTokens(); update(); };
+  const rerender = () => { readTokens(); update(); syncThemeBtn(); };
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
   new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
