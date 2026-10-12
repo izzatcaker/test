@@ -130,7 +130,7 @@ def main():
             msg += f", {dupes:,} duplicate rows ignored (already in an earlier file)"
         print(msg)
 
-    config = json.loads(args.config.read_text()) if args.config.exists() else {}
+    config = json.loads(args.config.read_text(encoding="utf-8")) if args.config.exists() else {}
 
     junctions = sorted({r["junction"] for r in records})
     dates = sorted({r["date"] for r in records})
@@ -176,7 +176,14 @@ def main():
         "rows": rows,
     }
 
-    template = args.template.read_text()
+    template = args.template.read_text(encoding="utf-8")
+    # Build the chart library into the page so it works offline and behind firewalls
+    lib = args.template.parent / "vendor" / "echarts.min.js"
+    cdn_tag = '<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"></script>'
+    if lib.exists() and cdn_tag in template:
+        template = template.replace(cdn_tag, "<script>" + lib.read_text(encoding="utf-8").replace("</script", "<\\/script") + "</script>")
+    else:
+        print("  note: chart library not embedded, the page will load it from the internet")
     marker = "/*__DATA__*/null"
     if marker not in template:
         sys.exit(f"{args.template} has no {marker} placeholder")
@@ -185,7 +192,7 @@ def main():
     page = template.replace(marker, data_js)
     if not args.fragment:
         page = '<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n' + page + "\n</html>\n"
-    args.out.write_text(page)
+    args.out.write_text(page, encoding="utf-8")
 
     total = sum(r["vehicles"] for r in records)
     print(

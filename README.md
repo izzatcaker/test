@@ -23,8 +23,8 @@ Every Excel export in `data/raw/` is merged into one page with filters for junct
 
 `dist/traffic-dashboard.html` is a single file with the data and layout images inside it.
 
-- **Email or Drive:** send the file. It opens in any browser. It needs internet access to load the
-  chart library and fonts.
+- **Email or Drive:** send the file. It opens in any browser, even offline (the chart library is
+  built into the file; only the fonts need internet, and it falls back to system fonts without it).
 - **Link with login:** host it on Cloudflare Pages and add Cloudflare Access (free for up to 50 users)
   so the client signs in with their email.
 - **Public link:** GitHub Pages or Netlify. Anyone with the link can see the data.
@@ -37,5 +37,6 @@ Every Excel export in `data/raw/` is merged into one page with filters for junct
 | `data/junctions.json` | Junction names, stage notes and layout image paths |
 | `data/layouts/` | Junction layout images |
 | `dashboard/template.html` | Dashboard page (layout, styles, charts) |
+| `dashboard/vendor/echarts.min.js` | Chart library (ECharts 5.5.1), embedded into the built page |
 | `scripts/build_dashboard.py` | Merges the data and builds the page |
 | `dist/traffic-dashboard.html` | The built dashboard to share |
